@@ -12,7 +12,7 @@ xfer2 -ip IP | -s[erver] [-N <file>] <dir> <dir> <file> ..
 ```
 
 The IP address specifies the public IP address. If IP==0, then xfer tries to lookup the IP address. This can succeed or not. Instead of using the `-ip` flag with an IP address (null), the `-s` option without an argument can be used.
-The optional `-N` flag specifies a file that is used to transfer only files (and directories) that are newer than this file.
+The optional `-N` flag specifies a file that is used to transfer only files (and directories) that are newer than this file. This enables the incremental file transfer mode.
 
 ## Client (File Consumer)
 
