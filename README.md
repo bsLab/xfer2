@@ -23,7 +23,7 @@ The client have only to specify the remote IP address of the xfer2 server (see a
 
 ## Reverse Connection
 
-If the file provider is behind a NAT or a firewall, and the file consumer is publically visible, the reverse program `xfer2r` can be used instead.
+If the file provider is behind a NAT or a firewall, and the file consumer is publically visible, the reverse program `xfer2rev` can be used instead.
 
 ```
 usage client: xfer2rev -ip IP [-N file] <dir> <dir> <file> .. 
