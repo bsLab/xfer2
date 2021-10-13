@@ -1,0 +1,177 @@
+#!/bin/bash
+
+NODE=node
+if [ -f /usr/bin/node8 ];
+then
+  NODE=/usr/bin/node8
+fi
+
+TAR=tar
+DATE=date
+IP=""
+
+if [ -e /usr/bin/gtar ]
+then
+  TAR=gtar
+fi
+if [ -e /usr/bin/gdate ]
+then
+  DATE=gdate
+fi
+
+
+if [ "X$1" == "X" ]
+then
+  echo "usage server: xfer -ip IP | -s[erver] [-N file] <dir> <dir> <file> .. "
+  echo "usage client: xfer <ip or host name>"
+  echo "IP=0: autodetect (server)"
+  exit
+fi
+
+if [ "X$1" == "X-ip" ]
+then
+  IP="$1 $2"
+  shift
+  shift
+fi
+
+if [ "X$1" == "X-s" ]
+then
+  IP="-ip 0"
+  shift
+fi
+
+if [ "X$1" == "X-server" ]
+then
+  IP="-ip 0"
+  shift
+fi
+
+if [ "X$1" == "X-N" ]
+then
+  NEWER="$2"
+  shift
+  shift
+fi
+
+# Server or client mode?
+if [ -e $1 ]
+then
+  MODE=server
+else
+  MODE=client
+fi
+
+
+cat > /tmp/server.js << EOF
+var net = require('net');
+var PORT=12345;
+var IP;
+function myip() {
+  var ip;
+  var os = require('os');
+  var nets = os.networkInterfaces();
+  var results = Object.create(null); // Or just '{}', an empty object
+  Object.keys(nets).forEach(function (name) {
+      for (const net of nets[name]) {
+          // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+          if (net.family === 'IPv4' && !net.internal) {
+              if (!results[name]) {
+                  results[name] = [];
+              }
+              results[name].push(net.address);
+              ip=net.address;
+          }
+      }
+  });
+  console.log(results);
+  return ip
+}
+var MAXBUFSIZE=16000;
+if (process.argv[2]=='-ip') {
+  process.argv.shift();
+  IP=process.argv[2];
+  if (IP=='0') {
+    IP = myip();
+  }
+  process.argv.shift();
+}
+if (process.argv[2]!=undefined) {
+  console.log('usage: tar cvf - <dir1> .. | server [-ip IP]');
+  return;
+}
+process.stdin.setEncoding('binary');
+var server = net.createServer(function(socket) {
+  var n=0;
+  console.log('Connected');
+  socket.setEncoding('binary');
+  process.stdin.on('readable', function() {
+    var chunk;
+    function write() {
+      chunk = process.stdin.read(MAXBUFSIZE);
+      if (!chunk) return;
+      data=new Buffer(chunk,'binary');
+      socket.write(data,function () {
+        // setImmediate(write);
+        write()
+      });      
+      n += data.length;
+    }
+    write();
+    if (0) while (chunk = process.stdin.read(MAXBUFSIZE)) {
+      data=new Buffer(chunk,'binary');
+      socket.write(data);
+      n += data.length;              
+    }
+  });
+  process.stdin.on('end', function () {
+    socket.end();
+    console.log('Send '+((n/1024/1024)|0)+' MB');
+    process.exit(0);
+  });
+});
+if (!IP)
+  require('dns').lookup(require('os').hostname(), function (err, add, fam) {
+    IP=add;
+    console.log('Listening on '+IP+':'+PORT);
+    server.listen(PORT, IP);
+  });
+else {
+  console.log('Listening on '+IP+':'+PORT);
+  server.listen(PORT, IP);
+}
+EOF
+
+cat > /tmp/client.js << EOF
+var net = require('net');
+var PORT=12345;
+var IP=process.argv[2];
+if (IP==undefined) {
+  console.log('usage: client <ip> | tar xvf -');
+  return;
+}
+var client = new net.Socket();
+client.connect(PORT, IP, function() {
+});
+client.on('data', function(data) {
+  process.stdout.write(data);
+});
+client.on('error',function (e) {
+});
+client.on('close', function() {
+});
+EOF
+case $MODE in
+  server)
+    if [ "X$NEWER" == "X" ]
+    then
+      $TAR cvf - $@ | $NODE /tmp/server.js $IP
+    else
+      $TAR cvf - --newer="`$DATE -r $NEWER`" $@ | $NODE /tmp/server.js $IP
+    fi
+    ;;
+  client)
+    $NODE /tmp/client.js $@ | $TAR xvf -
+    ;;
+esac
+
